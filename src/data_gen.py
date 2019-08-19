@@ -4,12 +4,15 @@ import os
 import math
 import codecs
 import random
+
+import cv2
 import numpy as np
 from glob import glob
 from PIL import Image
 
 from keras.utils import np_utils, Sequence, OrderedEnqueuer
 from sklearn.model_selection import train_test_split
+from imgaug import augmenters as iaa
 
 
 class BaseSequence(Sequence):
@@ -59,10 +62,99 @@ class BaseSequence(Sequence):
         img = self.center_img(img, self.img_size[0])
         return img
 
+    # 对图像做随机数据增强
+    def get_random_data(self, img_path):
+        def grayscale(image):
+            img = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+            path = '../source/tmp.jpg'
+            cv2.imwrite(path, img)
+            im = Image.open(path)
+            return im
+
+        def add_noise(image, percentage):
+            noise_image = image.copy()
+            im_w = image.shape[1]
+            im_h = image.shape[0]
+            noise_num = int(percentage * im_w * im_h)
+            for i in range(noise_num):
+                temp_x = np.random.randint(0, image.shape[1])
+                temp_y = np.random.randint(0, image.shape[0])
+                noise_image[temp_y][temp_x][np.random.randint(3)] = np.random.randn(1)[0]
+            return noise_image
+
+        def rotate(image):
+            (h, w) = image.shape[:2]
+            center = (w / 2, h / 2)
+            angle = (np.random.random() - 0.5) * 20
+            M = cv2.getRotationMatrix2D(center, angle, 1)
+            image = cv2.warpAffine(image, M, (w, h))
+            return image
+
+        def crop(image):
+            img_w = image.shape[1]
+            img_h = image.shape[0]
+            h = np.random.randint(30, 50)
+            w = np.random.randint(30, 50)
+            image = image[h:h + img_h, w:w + img_w, :]
+            return image
+
+        NUM_ANGMENTATION_SUPPORT = 3
+
+        # 数据格式   imgPath,label
+        image = Image.open(img_path)
+        resize_scale = self.img_size[0] / max(image.size[:2])
+        image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))
+
+        image = np.array(image)
+        image = image[:, :, ::-1]
+        aug_num = np.random.randint(low=0, high=NUM_ANGMENTATION_SUPPORT)
+        aug_queue = np.random.permutation(NUM_ANGMENTATION_SUPPORT)[0:aug_num]
+        try:
+            for idx in aug_queue:
+                if idx == 0:
+                    image = np.fliplr(image)
+                elif idx == 1:
+                    image = crop(image)
+                elif idx == 2:
+                    image = rotate(image)
+                # elif idx == 3:
+                #   image = shiftdown(image)
+        except Exception as e:
+            print('\nexcept:', e)
+
+        image = self.center_img(image, self.img_size[0])
+        return image
+
+    def get_argument_data(self, img_path):
+        image = Image.open(img_path)
+        resize_scale = self.img_size[0] / max(image.size[:2])
+        image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))
+        image = image.convert('RGB')
+        image = np.array(image)
+        image = image[:, :, ::-1]
+
+        seq = iaa.Sequential([
+            # iaa.Crop(px=(30, 50)),  # 对图像进行crop操作，随机在距离边缘的0到16像素中选择crop范围
+            iaa.CropAndPad(
+                percent=(0, 0.1),
+                pad_mode=["edge"],
+            ),
+            iaa.Fliplr(0.5),  # 对百分之五十的图像进行做左右翻转
+            iaa.Flipud(0.1),
+            iaa.GaussianBlur((0, 1.0)),  # 在模型上使用0均值1方差进行高斯模糊
+            iaa.Grayscale(alpha=(0.0, 1.0)),  # 灰度化
+            iaa.Resize((0.6, 1.0)),  # 将每个图像的大小调整为其原始大小的50％到100％之间
+            iaa.EdgeDetect(alpha=(0.0, 0.2)),
+            iaa.Affine(rotate=(-45, 45), scale={"x": (0.8, 1.3), "y": (0.8, 1.3)}),
+        ])
+        image = seq.augment_image(image)
+        image = self.center_img(image, self.img_size[0])
+        return image
+
     def __getitem__(self, idx):
         batch_x = self.x_y[idx * self.batch_size: (idx + 1) * self.batch_size, 0]
         batch_y = self.x_y[idx * self.batch_size: (idx + 1) * self.batch_size, 1:]
-        batch_x = np.array([self.preprocess_img(img_path) for img_path in batch_x])
+        batch_x = np.array([self.get_argument_data(img_path) for img_path in batch_x])
         batch_y = np.array(batch_y).astype(np.float32)
         return batch_x, batch_y
 
@@ -113,7 +205,7 @@ def data_flow(train_data_dir, batch_size, num_classes, input_size):  # need modi
     return train_sequence, validation_sequence
 
 
-if __name__ == '__main__':
+def origin_test():
     # train_enqueuer, validation_enqueuer, train_data_generator, validation_data_generator = data_flow(dog_cat_data_path, batch_size)
     # for i in range(10):
     #     train_data_batch = next(train_data_generator)
@@ -138,3 +230,19 @@ if __name__ == '__main__':
         img = Image.fromarray(data[:, :, ::-1])
         img.save('./debug/%d_3_%s.jpg' % (index, label_name[int(bacth_label[index][1])]))
     print('end')
+
+
+def data_argmentation():
+    train_img_paths = [
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_17.jpg']
+    train_labels = [[0]]
+    train_sequence = BaseSequence(train_img_paths, train_labels, 1, [224, 224])
+
+    for i in range(10):
+        batchx, batchy = train_sequence.__getitem__(0)
+        cv2.imwrite('../source/tmp/%s.jpg' % i, batchx[0])
+    print('Done')
+
+
+if __name__ == '__main__':
+    data_argmentation()

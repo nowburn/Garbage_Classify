@@ -71,6 +71,7 @@ def train_model(FLAGS):
 
     optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
     objective = 'binary_crossentropy'
+    # objective = 'categorical_crossentropy'
     metrics = ['accuracy']
     model = model_fn(FLAGS, objective, optimizer, metrics)
     # if FLAGS.restore_model_path != '' and file.exists(FLAGS.restore_model_path):
