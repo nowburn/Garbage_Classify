@@ -64,12 +64,6 @@ class BaseSequence(Sequence):
 
     # 对图像做随机数据增强
     def get_random_data(self, img_path):
-        def grayscale(image):
-            img = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-            path = '../source/tmp.jpg'
-            cv2.imwrite(path, img)
-            im = Image.open(path)
-            return im
 
         def add_noise(image, percentage):
             noise_image = image.copy()
@@ -129,23 +123,21 @@ class BaseSequence(Sequence):
         image = Image.open(img_path)
         resize_scale = self.img_size[0] / max(image.size[:2])
         image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))
-        image = image.convert('RGB')
         image = np.array(image)
         image = image[:, :, ::-1]
 
-        seq = iaa.Sequential([
-            # iaa.Crop(px=(30, 50)),  # 对图像进行crop操作，随机在距离边缘的0到16像素中选择crop范围
-            iaa.CropAndPad(
-                percent=(0, 0.1),
-                pad_mode=["edge"],
-            ),
+        seq = iaa.SomeOf((0, None), [
+            iaa.Crop(px=(30, 50)),  # 对图像进行crop操作，随机在距离边缘的0到16像素中选择crop范围
+            # iaa.CropAndPad(
+            #     percent=(0, 0.1),
+            #     pad_mode=["edge"],
+            # ),
             iaa.Fliplr(0.5),  # 对百分之五十的图像进行做左右翻转
-            iaa.Flipud(0.1),
-            iaa.GaussianBlur((0, 1.0)),  # 在模型上使用0均值1方差进行高斯模糊
-            iaa.Grayscale(alpha=(0.0, 1.0)),  # 灰度化
-            iaa.Resize((0.6, 1.0)),  # 将每个图像的大小调整为其原始大小的50％到100％之间
-            iaa.EdgeDetect(alpha=(0.0, 0.2)),
-            iaa.Affine(rotate=(-45, 45), scale={"x": (0.8, 1.3), "y": (0.8, 1.3)}),
+            # iaa.GaussianBlur((0, 1.0)),  # 在模型上使用0均值1方差进行高斯模糊
+            # iaa.Grayscale(alpha=(0.0, 1.0)),  # 灰度化
+            # iaa.Resize((0.5, 1.0)),  # 将每个图像的大小调整为其原始大小的50％到100％之间
+            # iaa.EdgeDetect(alpha=(0.0, 0.2)),
+            iaa.Affine(rotate=(-25, 25)),
         ])
         image = seq.augment_image(image)
         image = self.center_img(image, self.img_size[0])
@@ -154,7 +146,7 @@ class BaseSequence(Sequence):
     def __getitem__(self, idx):
         batch_x = self.x_y[idx * self.batch_size: (idx + 1) * self.batch_size, 0]
         batch_y = self.x_y[idx * self.batch_size: (idx + 1) * self.batch_size, 1:]
-        batch_x = np.array([self.get_argument_data(img_path) for img_path in batch_x])
+        batch_x = np.array([self.get_random_data(img_path) for img_path in batch_x])
         batch_y = np.array(batch_y).astype(np.float32)
         return batch_x, batch_y
 
@@ -240,7 +232,7 @@ def data_argmentation():
 
     for i in range(10):
         batchx, batchy = train_sequence.__getitem__(0)
-        cv2.imwrite('../source/tmp/%s.jpg' % i, batchx[0])
+        cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/argument/%s.jpg' % i, batchx[0])
     print('Done')
 
 

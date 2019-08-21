@@ -14,7 +14,7 @@ class garbage_classify_service(TfServingBaseService):
         self.model_path = model_path
         self.signature_key = 'predict_images'
 
-        self.input_size = 224  # the input image size of the model
+        self.input_size = 331  # the input image size of the model
 
         # add the input and output key of your pb model here,
         # these keys are defined when you save a pb file
