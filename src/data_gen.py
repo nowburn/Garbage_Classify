@@ -119,7 +119,7 @@ class BaseSequence(Sequence):
         image = self.center_img(image, self.img_size[0])
         return image
 
-    def get_argument_data(self, img_path):
+    def get_augment_data(self, img_path):
         image = Image.open(img_path)
         resize_scale = self.img_size[0] / max(image.size[:2])
         image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))

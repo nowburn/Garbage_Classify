@@ -14,13 +14,26 @@ from data_gen import data_flow
 from models.resnet50 import ResNet50
 
 from keras.applications.nasnet import NASNetLarge
-from keras.layers import Dense, Flatten, Dropout, BatchNormalization, GlobalAveragePooling2D
+from keras.layers import Dense, Flatten, GlobalAveragePooling2D
 
 from classification_models.keras import Classifiers
 
 backend.set_image_data_format('channels_last')
 
 avg_acc = {}
+
+
+def senet_model_fn(FLAGS, objective, optimizer, metrics):
+    senet, preprocess_input = Classifiers.get('senet154')
+
+    # build model
+    base_model = senet(input_shape=(FLAGS.input_size, FLAGS.input_size, 3), weights='imagenet', include_top=False)
+    x = GlobalAveragePooling2D()(base_model.output)
+    x = Dense(1024, activation='relu')(x)
+    output = Dense(FLAGS.num_classes, activation='softmax')(x)
+    model = Model(inputs=[base_model.input], outputs=[output])
+    model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
+    return model
 
 
 def nasnet_model_fn(FLAGS, objective, optimizer, metrics):
@@ -32,8 +45,9 @@ def nasnet_model_fn(FLAGS, objective, optimizer, metrics):
     x = Dense(1024, activation='relu')(x)
     output = Dense(FLAGS.num_classes, activation='softmax')(x)
     model = Model(inputs=[base_model.input], outputs=[output])
-    model.load_weights(filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/weights_004_0.9921.h5',
-                       by_name=True)
+    model.load_weights(
+        filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-18/weights_013_0.9953.h5',
+        by_name=True)
     model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
     return model
 
@@ -143,7 +157,7 @@ def train_model(FLAGS):
     objective = 'binary_crossentropy'
     # objective = 'categorical_crossentropy'
     metrics = ['accuracy']
-    model = nasnet_model_fn(FLAGS, objective, optimizer, metrics)
+    model = senet_model_fn(FLAGS, objective, optimizer, metrics)
 
     if not os.path.exists(FLAGS.train_local):
         os.makedirs(FLAGS.train_local)
@@ -183,7 +197,7 @@ def train_model(FLAGS):
     #     use_multiprocessing=True,
     #     shuffle=True
     # )
-    top_3 = sorted(avg_acc.items(), key=lambda x: x[1], reverse=True)
+    rank = sorted(avg_acc.items(), key=lambda x: x[1], reverse=True)
 
     print('training done!')
     if FLAGS.deploy_script_path != '':
@@ -193,7 +207,9 @@ def train_model(FLAGS):
     test_model(FLAGS, model)
 
     print('end\n')
-    print(top_3)
+    for item in rank:
+        print('{}: {}\n'.format(item[0], item[1]))
+
     with open(os.path.join(FLAGS.train_local, 'acc_rank.txt'), 'w') as f:
-        for item in top_3:
+        for item in rank:
             f.write('{}: {}\n'.format(item[0], item[1]))
