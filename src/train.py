@@ -13,7 +13,6 @@ from keras.callbacks import TensorBoard, Callback
 from data_gen import data_flow
 from models.resnet50 import ResNet50
 
-from keras.applications.nasnet import NASNetLarge
 from keras.layers import Dense, Flatten, GlobalAveragePooling2D
 
 from classification_models.keras import Classifiers
@@ -32,6 +31,12 @@ def senet_model_fn(FLAGS, objective, optimizer, metrics):
     x = Dense(1024, activation='relu')(x)
     output = Dense(FLAGS.num_classes, activation='softmax')(x)
     model = Model(inputs=[base_model.input], outputs=[output])
+
+    for layer in model.layers[:4000]:
+        layer.trainable = False
+    for layer in model.layers[4000:]:
+        layer.trainable = True
+
     model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
     return model
 
@@ -45,39 +50,9 @@ def nasnet_model_fn(FLAGS, objective, optimizer, metrics):
     x = Dense(1024, activation='relu')(x)
     output = Dense(FLAGS.num_classes, activation='softmax')(x)
     model = Model(inputs=[base_model.input], outputs=[output])
-    model.load_weights(
-        filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-18/weights_013_0.9953.h5',
-        by_name=True)
-    model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
-    return model
-
-
-def nasnet2_model_fn(FLAGS, objective, optimizer, metrics):
-    """
-    pre-trained nasnetlarge model
-    """
-    # 构建不带分类器的预训练模型
-    base_model = NASNetLarge(input_shape=(FLAGS.input_size, FLAGS.input_size, 3), weights='imagenet', include_top=False)
-
-    # 添加全局平均池化层
-    x = base_model.output
-    x = GlobalAveragePooling2D()(x)
-    # x = BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros',
-    #                        gamma_initializer='ones', moving_mean_initializer='zeros',
-    #                        moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None,
-    #                        beta_constraint=None, gamma_constraint=None)(x)
-
-    # 添加一个全连接层
-    x = Dense(1024, activation='relu')(x)
-    # x = BatchNormalization(axis=-1, momentum=0.99, epsilon=0.001, center=True, scale=True, beta_initializer='zeros',
-    #                        gamma_initializer='ones', moving_mean_initializer='zeros',
-    #                        moving_variance_initializer='ones', beta_regularizer=None, gamma_regularizer=None,
-    #                        beta_constraint=None, gamma_constraint=None)(x)
-    predictions = Dense(FLAGS.num_classes, activation='softmax')(x)
-    model = Model(inputs=base_model.input, outputs=predictions)
-
-    for layer in base_model.layers:
-        layer.trainable = False
+    # model.load_weights(
+    #     filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-18/weights_013_0.9953.h5',
+    #     by_name=True)
     model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
     return model
 
@@ -150,14 +125,15 @@ def test_model(FLAGS, model):
 
 def train_model(FLAGS):
     # data flow generator
-    train_sequence, validation_sequence = data_flow(FLAGS.data_local, FLAGS.batch_size,
+    train_data_dir_list = list(FLAGS.data_local.split(','))
+    train_sequence, validation_sequence = data_flow(train_data_dir_list, FLAGS.batch_size,
                                                     FLAGS.num_classes, FLAGS.input_size)
 
     optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
     objective = 'binary_crossentropy'
     # objective = 'categorical_crossentropy'
     metrics = ['accuracy']
-    model = senet_model_fn(FLAGS, objective, optimizer, metrics)
+    model = nasnet_model_fn(FLAGS, objective, optimizer, metrics)
 
     if not os.path.exists(FLAGS.train_local):
         os.makedirs(FLAGS.train_local)
@@ -204,7 +180,7 @@ def train_model(FLAGS):
         from save_model import save_pb_model
         save_pb_model(FLAGS, model)
 
-    test_model(FLAGS, model)
+    # test_model(FLAGS, model)
 
     print('end\n')
     for item in rank:

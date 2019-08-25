@@ -113,13 +113,6 @@ def test_batch_h5(FLAGS):
 
 
 def test_single_model(FLAGS):
-    # if FLAGS.eval_pb_path.startswith('s3//'):
-    #     pb_model_dir = '/cache/tmp/model'
-    #     if os.path.exists(pb_model_dir):
-    #         shutil.rmtree(pb_model_dir)
-    #     file.copy_parallel(FLAGS.eval_pb_path, pb_model_dir)
-    # else:
-    #     pb_model_dir = FLAGS.eval_pb_path
     pb_model_dir = FLAGS.eval_pb_path
     signature_key = 'predict_images'
     input_key_1 = 'input_img'
@@ -172,5 +165,3 @@ def eval_model(FLAGS):
             test_single_h5(FLAGS, FLAGS.eval_weights_path)
     elif FLAGS.eval_pb_path != '':
         test_single_model(FLAGS)
-
-

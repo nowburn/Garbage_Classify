@@ -126,8 +126,8 @@ class BaseSequence(Sequence):
         image = np.array(image)
         image = image[:, :, ::-1]
 
-        seq = iaa.SomeOf((0, None), [
-            iaa.Crop(px=(30, 50)),  # 对图像进行crop操作，随机在距离边缘的0到16像素中选择crop范围
+        seq = iaa.SomeOf((0, 2), [
+            iaa.Crop(percent=(0, 0.2)),  # 对图像进行crop操作，随机在距离边缘的0到16像素中选择crop范围
             # iaa.CropAndPad(
             #     percent=(0, 0.1),
             #     pad_mode=["edge"],
@@ -156,12 +156,17 @@ class BaseSequence(Sequence):
         np.random.shuffle(self.x_y)
 
 
-def data_flow(train_data_dir, batch_size, num_classes, input_size):  # need modify
-    label_files = glob(os.path.join(train_data_dir, '*.txt'))
+def data_flow(train_data_dir_list, batch_size, num_classes, input_size):  # need modify
+
+    label_files = []
+    for train_data_dir in train_data_dir_list:
+        label_files += glob(os.path.join(train_data_dir, '*.txt'))
+
     random.shuffle(label_files)
     img_paths = []
     labels = []
     for index, file_path in enumerate(label_files):
+        cur_dir = file_path.split('img_')[0]
         with codecs.open(file_path, 'r', 'utf-8') as f:
             line = f.readline()
         line_split = line.strip().split(', ')
@@ -170,7 +175,7 @@ def data_flow(train_data_dir, batch_size, num_classes, input_size):  # need modi
             continue
         img_name = line_split[0]
         label = int(line_split[1])
-        img_paths.append(os.path.join(train_data_dir, img_name))
+        img_paths.append(os.path.join(cur_dir, img_name))
         labels.append(label)
     labels = np_utils.to_categorical(labels, num_classes)
     train_img_paths, validation_img_paths, train_labels, validation_labels = \
@@ -232,7 +237,7 @@ def data_argmentation():
 
     for i in range(10):
         batchx, batchy = train_sequence.__getitem__(0)
-        cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/argument/%s.jpg' % i, batchx[0])
+        cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/augment/%s.jpg' % i, batchx[0])
     print('Done')
 
 
