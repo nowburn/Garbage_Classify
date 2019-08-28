@@ -7,7 +7,7 @@ import numpy as np
 from keras import backend
 from keras.models import Model
 from keras.optimizers import adam
-from keras.callbacks import TensorBoard, Callback
+from keras.callbacks import TensorBoard, Callback, ReduceLROnPlateau
 # from moxing.framework import file
 
 from data_gen import data_flow
@@ -50,9 +50,9 @@ def nasnet_model_fn(FLAGS, objective, optimizer, metrics):
     x = Dense(1024, activation='relu')(x)
     output = Dense(FLAGS.num_classes, activation='softmax')(x)
     model = Model(inputs=[base_model.input], outputs=[output])
-    # model.load_weights(
-    #     filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-18/weights_013_0.9953.h5',
-    #     by_name=True)
+    model.load_weights(
+        filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-5-all/weights_005_0.9944.h5',
+        by_name=True)
     model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
     return model
 
@@ -129,9 +129,11 @@ def train_model(FLAGS):
     train_sequence, validation_sequence = data_flow(train_data_dir_list, FLAGS.batch_size,
                                                     FLAGS.num_classes, FLAGS.input_size)
 
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                                  patience=2, mode='auto', min_lr=1e-16)
+
     optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
     objective = 'binary_crossentropy'
-    # objective = 'categorical_crossentropy'
     metrics = ['accuracy']
     model = nasnet_model_fn(FLAGS, objective, optimizer, metrics)
 
@@ -145,7 +147,7 @@ def train_model(FLAGS):
         steps_per_epoch=len(train_sequence),
         epochs=FLAGS.max_epochs,
         verbose=1,
-        callbacks=[history, tensorBoard],
+        callbacks=[history, reduce_lr, tensorBoard],
         validation_data=validation_sequence,
         max_queue_size=10,
         workers=int(multiprocessing.cpu_count() * 0.7),

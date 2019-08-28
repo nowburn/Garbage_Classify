@@ -98,7 +98,6 @@ class BaseSequence(Sequence):
         image = Image.open(img_path)
         resize_scale = self.img_size[0] / max(image.size[:2])
         image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))
-
         image = np.array(image)
         image = image[:, :, ::-1]
         aug_num = np.random.randint(low=0, high=NUM_ANGMENTATION_SUPPORT)
@@ -111,8 +110,6 @@ class BaseSequence(Sequence):
                     image = crop(image)
                 elif idx == 2:
                     image = rotate(image)
-                # elif idx == 3:
-                #   image = shiftdown(image)
         except Exception as e:
             print('\nexcept:', e)
 
@@ -126,19 +123,16 @@ class BaseSequence(Sequence):
         image = np.array(image)
         image = image[:, :, ::-1]
 
-        seq = iaa.SomeOf((0, 2), [
-            iaa.Crop(percent=(0, 0.2)),  # 对图像进行crop操作，随机在距离边缘的0到16像素中选择crop范围
-            # iaa.CropAndPad(
-            #     percent=(0, 0.1),
-            #     pad_mode=["edge"],
-            # ),
-            iaa.Fliplr(0.5),  # 对百分之五十的图像进行做左右翻转
-            # iaa.GaussianBlur((0, 1.0)),  # 在模型上使用0均值1方差进行高斯模糊
-            # iaa.Grayscale(alpha=(0.0, 1.0)),  # 灰度化
-            # iaa.Resize((0.5, 1.0)),  # 将每个图像的大小调整为其原始大小的50％到100％之间
-            # iaa.EdgeDetect(alpha=(0.0, 0.2)),
-            iaa.Affine(rotate=(-25, 25)),
-        ])
+        augs = iaa.SomeOf((2, 4),
+                          [
+                              iaa.Crop(px=(0, 4)),
+                              iaa.Affine(scale={'x': (0.8, 1.2), 'y': (0.8, 1.2)}),
+                              iaa.Affine(translate_percent={'x': (-0.2, 0.2), 'y': (-0.2, 0.2)}),
+                              iaa.Affine(rotate=(-45, 45)),
+                              iaa.Affine(shear=(-10, 10))
+
+                          ])
+        seq = iaa.Sequential([augs])
         image = seq.augment_image(image)
         image = self.center_img(image, self.img_size[0])
         return image
@@ -229,7 +223,7 @@ def origin_test():
     print('end')
 
 
-def data_argmentation():
+def data_augmentation():
     train_img_paths = [
         '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_17.jpg']
     train_labels = [[0]]
@@ -242,4 +236,4 @@ def data_argmentation():
 
 
 if __name__ == '__main__':
-    data_argmentation()
+    data_augmentation()

@@ -1,4 +1,3 @@
-import collections
 import os
 import numpy as np
 import tensorflow as tf
@@ -7,10 +6,13 @@ from PIL import Image
 from glob import glob
 import shutil
 
+from classification_models.keras import Classifiers
+import matplotlib.pyplot as plt
+import cv2
+
 BASE_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/my_data/processed/'
 
-IMG_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/my_data/cardboard/'
-TYPE_DICT = {'cardboard': 30, 'glass': 27, 'metal': 33, 'paper': 0, 'plastic': 0, 'trash': 0}
+IMG_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/example/'
 
 MODEL_PATH = '/home/nowburn/disk/data/Garbage_Classify/pretrained_model/kaggle_model/model/'
 
@@ -145,79 +147,95 @@ class Garbage_classify_service():
         return data
 
 
-def copy_example():
-    type = [0 for i in range(40)]
-    src_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/'
-    dst_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/example/'
-    file_list = glob(os.path.join(src_dir, '*.txt'))
-    for file_path in file_list:
-        with open(file_path, 'r') as f:
-            line = f.readline()
-            line_split = line.strip().split(', ')
-            idx = int(line_split[1])
-            if type[idx] < 5:
-                src = os.path.join(src_dir, line_split[0])
-                dst = os.path.join(dst_dir, line_split[0])
-                shutil.copyfile(src, dst)
-                type[idx] += 1
+class Newdata_pipeline():
 
+    def copy_example(self):
+        type = [0 for i in range(40)]
+        src_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/'
+        dst_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/example/'
+        file_list = glob(os.path.join(src_dir, '*.txt'))
+        for file_path in file_list:
+            with open(file_path, 'r') as f:
+                line = f.readline()
+                line_split = line.strip().split(', ')
+                idx = int(line_split[1])
+                if type[idx] < 5:
+                    src = os.path.join(src_dir, line_split[0])
+                    dst = os.path.join(dst_dir, line_split[0])
+                    shutil.copyfile(src, dst)
+                    type[idx] += 1
 
-def rename():
-    dst_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/example/'
-    file_list = glob(os.path.join(dst_dir, '*.jpg'))
-    file_list.sort(key=lambda x: int((os.path.basename(x)[4:]).split('.')[0]))
-    type = [i for i in range(40)]
+    def rename(self):
+        dst_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/example/'
+        file_list = glob(os.path.join(dst_dir, '*.jpg'))
+        file_list.sort(key=lambda x: int((os.path.basename(x)[4:]).split('.')[0]))
+        type = [i for i in range(40)]
 
-    cnt = 0
-    prefix = ''
-    for file in file_list:
-        if cnt % 5 == 0:
-            prefix = str(type[cnt // 5]) + '_'
-        os.rename(file, os.path.join(dst_dir, prefix + str(cnt + 1) + '.jpg'))
-        cnt += 1
-
-
-def format_data():
-    last_no = 19735
-    dir_list = [dir for dir in os.listdir(BASE_DIR)]
-    dir_list.sort()
-    for dir in dir_list:
         cnt = 0
-        for old_file in glob((os.path.join(BASE_DIR + dir, '*.jpg'))):
-            last_no += 1
-            cnt += 1
-            new_file = os.path.join(BASE_DIR + dir, 'img_' + str(last_no) + '.jpg')
-            os.rename(old_file, new_file)
-            with open(new_file[:-4] + '.txt', 'w') as f:
-                f.write('%s, %s' % (os.path.basename(new_file), dir))
-
-        print(dir)
-        print('=' * 50)
-        print('renamed %s imgs' % cnt)
-        print('last no: %s' % last_no)
-
-
-def move_file():
-    dir_list = [dir for dir in os.listdir(BASE_DIR)]
-    for dir in dir_list:
-        for file in glob((os.path.join(BASE_DIR + dir, '*.*'))):
-            shutil.move(file, os.path.join(BASE_DIR, os.path.basename(file)))
-
-
-def del_unpair():
-    dir_list = [dir for dir in os.listdir(BASE_DIR)]
-    for dir in dir_list:
-        file_list = glob(os.path.join(BASE_DIR + dir, '*.txt'))
+        prefix = ''
         for file in file_list:
-            img_file = file.replace('txt', 'jpg')
-            if not os.path.exists(img_file):
-                os.remove(file)
+            if cnt % 5 == 0:
+                prefix = str(type[cnt // 5]) + '_'
+            os.rename(file, os.path.join(dst_dir, prefix + str(cnt + 1) + '.jpg'))
+            cnt += 1
+
+    def format_data(self):
+        last_no = 19735
+        dir_list = [dir for dir in os.listdir(BASE_DIR)]
+        dir_list.sort()
+        for dir in dir_list:
+            cnt = 0
+            for old_file in glob((os.path.join(BASE_DIR + dir, '*.jpg'))):
+                last_no += 1
+                cnt += 1
+                new_file = os.path.join(BASE_DIR + dir, 'img_' + str(last_no) + '.jpg')
+                os.rename(old_file, new_file)
+                with open(new_file[:-4] + '.txt', 'w') as f:
+                    f.write('%s, %s' % (os.path.basename(new_file), dir))
+
+            print(dir)
+            print('=' * 50)
+            print('renamed %s imgs' % cnt)
+            print('last no: %s' % last_no)
+
+    def move_file(self):
+        dir_list = [dir for dir in os.listdir(BASE_DIR)]
+        for dir in dir_list:
+            for file in glob((os.path.join(BASE_DIR + dir, '*.*'))):
+                shutil.move(file, os.path.join(BASE_DIR, os.path.basename(file)))
+
+    def del_unpair(self):
+        dir_list = [dir for dir in os.listdir(BASE_DIR)]
+        for dir in dir_list:
+            file_list = glob(os.path.join(BASE_DIR + dir, '*.txt'))
+            for file in file_list:
+                img_file = file.replace('txt', 'jpg')
+                if not os.path.exists(img_file):
+                    os.remove(file)
+
+
+class Preprocess():
+
+    def nasnetlarge_process(self, path):
+        nasnetlarge, preprocess_input = Classifiers.get('nasnetlarge')
+        img = Image.open(path)
+        img = np.array(img)
+        # img = img[:, :, ::-1]
+        img = np.expand_dims(img, axis=0)
+        img2 = preprocess_input(img)
+        print(type(img2))
+        print(img2.shape)
+        plt.imshow(img2[0])
+        plt.show()
+        # cv2.imshow("img2", img2)
+        # cv2.imwrite('/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/img2.jpg', img2)
+        # cv2.waitKey(0)
 
 
 if __name__ == '__main__':
-    # del_unpair()
-    move_file()
-    # format_data()
+    process = Preprocess()
+    # process.nasnetlarge_process(os.path.join(IMG_DIR, '21_108.jpg'))
+    process.nasnetlarge_process('test1.png')
     # server = Garbage_classify_service('TEST', MODEL_PATH)
     # data = {}
     # img_dict = collections.OrderedDict()
