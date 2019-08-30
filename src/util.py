@@ -235,7 +235,7 @@ class Preprocess():
 if __name__ == '__main__':
     process = Preprocess()
     # process.nasnetlarge_process(os.path.join(IMG_DIR, '21_108.jpg'))
-    process.nasnetlarge_process('test1.png')
+    # process.nasnetlarge_process('test1.png')
     # server = Garbage_classify_service('TEST', MODEL_PATH)
     # data = {}
     # img_dict = collections.OrderedDict()

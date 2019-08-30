@@ -4,5 +4,5 @@ python run.py \
       --train_url='../model_snapshots' \
       --num_classes=40 \
       --deploy_script_path='./deploy_scripts' \
-      --max_epochs=25
+      --max_epochs=5
       #--test_data_url='../datasets/test_data'

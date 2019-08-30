@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+from datetime import datetime
 import multiprocessing
 from glob import glob
 
@@ -50,9 +51,9 @@ def nasnet_model_fn(FLAGS, objective, optimizer, metrics):
     x = Dense(1024, activation='relu')(x)
     output = Dense(FLAGS.num_classes, activation='softmax')(x)
     model = Model(inputs=[base_model.input], outputs=[output])
-    model.load_weights(
-        filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-5-all/weights_005_0.9944.h5',
-        by_name=True)
+    # model.load_weights(
+    #     filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-5-all/weights_005_0.9944.h5',
+    #     by_name=True)
     model.compile(loss=objective, optimizer=optimizer, metrics=metrics)
     return model
 
@@ -124,6 +125,7 @@ def test_model(FLAGS, model):
 
 
 def train_model(FLAGS):
+    start_time = datetime.now()
     # data flow generator
     train_data_dir_list = list(FLAGS.data_local.split(','))
     train_sequence, validation_sequence = data_flow(train_data_dir_list, FLAGS.batch_size,
@@ -133,7 +135,7 @@ def train_model(FLAGS):
                                   patience=2, mode='auto', min_lr=1e-16)
 
     optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
-    objective = 'binary_crossentropy'
+    objective = 'categorical_crossentropy'
     metrics = ['accuracy']
     model = nasnet_model_fn(FLAGS, objective, optimizer, metrics)
 
@@ -154,27 +156,7 @@ def train_model(FLAGS):
         use_multiprocessing=True,
         shuffle=True
     )
-    # print('TOP FC trained over (%s)' % (FLAGS.max_epochs // 2))
-    # print('Fine tuning start ...')
-    # # fine tuning
-    # for layer in model.layers[:1031]:
-    #     layer.trainable = False
-    # for layer in model.layers[1031:]:
-    #     layer.trainable = True
-    #
-    # model.compile(loss=objective, optimizer=adam(lr=1e-4, clipnorm=0.001), metrics=metrics)
-    # model.fit_generator(
-    #     train_sequence,
-    #     steps_per_epoch=len(train_sequence),
-    #     epochs=FLAGS.max_epochs - FLAGS.max_epochs // 2,
-    #     verbose=1,
-    #     callbacks=[history, tensorBoard],
-    #     validation_data=validation_sequence,
-    #     max_queue_size=10,
-    #     workers=int(multiprocessing.cpu_count() * 0.7),
-    #     use_multiprocessing=True,
-    #     shuffle=True
-    # )
+
     rank = sorted(avg_acc.items(), key=lambda x: x[1], reverse=True)
 
     print('training done!')
@@ -182,9 +164,10 @@ def train_model(FLAGS):
         from save_model import save_pb_model
         save_pb_model(FLAGS, model)
 
-    # test_model(FLAGS, model)
-
-    print('end\n')
+    end_time = datetime.now()
+    cost_seconds = (end_time - start_time).seconds
+    print('Cost time: {}:{}:{}\n'.format(cost_seconds // 3600, (cost_seconds % 3600) // 60,
+                                         cost_seconds % 60))
     for item in rank:
         print('{}: {}\n'.format(item[0], item[1]))
 

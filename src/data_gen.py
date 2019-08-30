@@ -150,7 +150,45 @@ class BaseSequence(Sequence):
         np.random.shuffle(self.x_y)
 
 
-def data_flow(train_data_dir_list, batch_size, num_classes, input_size):  # need modify
+def data_flow(train_data_dir_list, batch_size, num_classes, input_size, test_rate=0.25):  # need modify
+
+    train_img_paths = []
+    train_labels = []
+    val_img_paths = []
+    val_labels = []
+    for train_data_dir in train_data_dir_list:
+        label_files = glob(os.path.join(train_data_dir, '*.txt'))
+        random.shuffle(label_files)
+        for index, file_path in enumerate(label_files):
+            with codecs.open(file_path, 'r', 'utf-8') as f:
+                line = f.readline()
+            line_split = line.strip().split(', ')
+            if len(line_split) != 2:
+                print('%s contain error lable' % os.path.basename(file_path))
+                continue
+            img_name = line_split[0]
+            label = int(line_split[1])
+            if np.random.random() < test_rate:
+                val_img_paths.append(os.path.join(train_data_dir, img_name))
+                val_labels.append(label)
+            else:
+                train_img_paths.append(os.path.join(train_data_dir, img_name))
+                train_labels.append(label)
+        label_files.clear()
+
+    train_labels = np_utils.to_categorical(train_labels, num_classes)
+    val_labels = np_utils.to_categorical(val_labels, num_classes)
+    print('====================================================================')
+    print('total samples: %d, training samples: %d, validation samples: %d' % (
+        len(train_labels) + len(val_labels), len(train_labels), len(val_labels)))
+
+    train_sequence = BaseSequence(train_img_paths, train_labels, batch_size, [input_size, input_size])
+    validation_sequence = BaseSequence(val_img_paths, val_labels, batch_size, [input_size, input_size])
+
+    return train_sequence, validation_sequence
+
+
+def data_flow2(train_data_dir_list, batch_size, num_classes, input_size):  # need modify
 
     label_files = []
     for train_data_dir in train_data_dir_list:
