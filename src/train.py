@@ -11,12 +11,13 @@ from keras.optimizers import adam
 from keras.callbacks import TensorBoard, Callback, ReduceLROnPlateau
 # from moxing.framework import file
 
-from data_gen import data_flow
 from models.resnet50 import ResNet50
 
 from keras.layers import Dense, Flatten, GlobalAveragePooling2D
 
 from classification_models.keras import Classifiers
+from datasets.my_data_gen import get_tran_val
+from keras import regularizers
 
 backend.set_image_data_format('channels_last')
 
@@ -43,13 +44,13 @@ def senet_model_fn(FLAGS, objective, optimizer, metrics):
 
 
 def nasnet_model_fn(FLAGS, objective, optimizer, metrics):
+    weight_decay = 5e-4
     nasnetlarge, preprocess_input = Classifiers.get('nasnetlarge')
-
     # build model
     base_model = nasnetlarge(input_shape=(FLAGS.input_size, FLAGS.input_size, 3), weights='imagenet', include_top=False)
     x = GlobalAveragePooling2D()(base_model.output)
     x = Dense(1024, activation='relu')(x)
-    output = Dense(FLAGS.num_classes, activation='softmax')(x)
+    output = Dense(FLAGS.num_classes, activation='softmax', kernel_regularizer=regularizers.l2(weight_decay))(x)
     model = Model(inputs=[base_model.input], outputs=[output])
     # model.load_weights(
     #     filepath='/home/nowburn/disk/data/Garbage_Classify/model_snapshots/model-nasnetlarge-5-all/weights_005_0.9944.h5',
@@ -127,9 +128,11 @@ def test_model(FLAGS, model):
 def train_model(FLAGS):
     start_time = datetime.now()
     # data flow generator
-    train_data_dir_list = list(FLAGS.data_local.split(','))
-    train_sequence, validation_sequence = data_flow(train_data_dir_list, FLAGS.batch_size,
-                                                    FLAGS.num_classes, FLAGS.input_size)
+    # train_data_dir_list = list(FLAGS.data_local.split(','))
+    # train_sequence, validation_sequence = data_flow(train_data_dir_list, FLAGS.batch_size,
+    #                                                 FLAGS.num_classes, FLAGS.input_size)
+    dir_list = list(FLAGS.data_local.split(','))
+    train_generator, validation_generator = get_tran_val(dir_list[0], dir_list[1], FLAGS.input_size, FLAGS.batch_size)
 
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                                   patience=2, mode='auto', min_lr=1e-16)
@@ -145,16 +148,15 @@ def train_model(FLAGS):
     history = LossHistory(FLAGS)
 
     model.fit_generator(
-        train_sequence,
-        steps_per_epoch=len(train_sequence),
+        train_generator,
+        steps_per_epoch=(11101 // FLAGS.batch_size) + 1,
         epochs=FLAGS.max_epochs,
         verbose=1,
         callbacks=[history, reduce_lr, tensorBoard],
-        validation_data=validation_sequence,
-        max_queue_size=10,
+        validation_data=validation_generator,
+        validation_steps=(3701 // FLAGS.batch_size) + 1,
         workers=int(multiprocessing.cpu_count() * 0.7),
         use_multiprocessing=True,
-        shuffle=True
     )
 
     rank = sorted(avg_acc.items(), key=lambda x: x[1], reverse=True)
@@ -166,6 +168,7 @@ def train_model(FLAGS):
 
     end_time = datetime.now()
     cost_seconds = (end_time - start_time).seconds
+    print('=' * 70)
     print('Cost time: {}:{}:{}\n'.format(cost_seconds // 3600, (cost_seconds % 3600) // 60,
                                          cost_seconds % 60))
     for item in rank:

@@ -129,5 +129,5 @@ dmypy.json
 datasets/
 source/
 model_snapshots/
-model_snapshots_bak/
+autoaug/
 resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5

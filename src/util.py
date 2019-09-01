@@ -1,10 +1,14 @@
 import os
+import random
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.saved_model import tag_constants
 from PIL import Image
 from glob import glob
 import shutil
+from keras.utils import np_utils
+from sklearn.model_selection import StratifiedShuffleSplit
 
 from classification_models.keras import Classifiers
 import matplotlib.pyplot as plt
@@ -213,6 +217,60 @@ class Newdata_pipeline():
                 if not os.path.exists(img_file):
                     os.remove(file)
 
+    def split_dir(self, train_data_dir_list, output_basedir):
+        label_files = []
+        train_img_paths = []
+        train_labels = []
+        val_img_paths = []
+        val_labels = []
+        for train_data_dir in train_data_dir_list:
+            label_files += glob(os.path.join(train_data_dir, '*.txt'))
+
+        random.shuffle(label_files)
+        img_paths = []
+        labels = []
+        for index, file_path in enumerate(label_files):
+            cur_dir = file_path.split('img_')[0]
+            with open(file_path, 'r') as f:
+                line = f.readline()
+            line_split = line.strip().split(', ')
+            if len(line_split) != 2:
+                print('%s contain error lable' % os.path.basename(file_path))
+                continue
+            img_name = line_split[0]
+            label = int(line_split[1])
+            img_paths.append(os.path.join(cur_dir, img_name))
+            labels.append(label)
+        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.25, random_state=0)
+        for train_index, test_index in sss.split(img_paths, labels):
+            for index in train_index:
+                train_img_paths.append(img_paths[index])
+                train_labels.append(labels[index])
+            for index in test_index:
+                val_img_paths.append(img_paths[index])
+                val_labels.append(labels[index])
+
+        train_data_dir = os.path.join(output_basedir, 'train_data')
+        val_data_dir = os.path.join(output_basedir, 'val_data')
+        if not os.path.exists(train_data_dir):
+            os.mkdir(train_data_dir)
+        if not os.path.exists(val_data_dir):
+            os.mkdir(val_data_dir)
+        for label, path in zip(train_labels, train_img_paths):
+            class_dir = os.path.join(train_data_dir, str(label))
+            if not os.path.exists(class_dir):
+                os.mkdir(class_dir)
+            shutil.copyfile(path, os.path.join(class_dir, os.path.basename(path)))
+
+        for label, path in zip(val_labels, val_img_paths):
+            class_dir = os.path.join(val_data_dir, str(label))
+            if not os.path.exists(class_dir):
+                os.mkdir(class_dir)
+            shutil.copyfile(path, os.path.join(class_dir, os.path.basename(path)))
+        print('=' * 70)
+        print('train_data : %s' % len(train_labels))
+        print('val_data : %s' % len(val_labels))
+
 
 class Preprocess():
 
@@ -233,7 +291,10 @@ class Preprocess():
 
 
 if __name__ == '__main__':
-    process = Preprocess()
+    train_dir_list = ['/home/nowburn/disk/data/Garbage_Classify/source/data/train_data/']
+    output_base_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/'
+    pipeline = Newdata_pipeline()
+    pipeline.split_dir(train_dir_list, output_base_dir)
     # process.nasnetlarge_process(os.path.join(IMG_DIR, '21_108.jpg'))
     # process.nasnetlarge_process('test1.png')
     # server = Garbage_classify_service('TEST', MODEL_PATH)

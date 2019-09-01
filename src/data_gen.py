@@ -14,6 +14,8 @@ from keras.utils import np_utils, Sequence, OrderedEnqueuer
 from sklearn.model_selection import train_test_split
 from imgaug import augmenters as iaa
 
+from datasets.dataset import GarbageImageDataGenerator
+
 
 class BaseSequence(Sequence):
     """
@@ -150,7 +152,7 @@ class BaseSequence(Sequence):
         np.random.shuffle(self.x_y)
 
 
-def data_flow(train_data_dir_list, batch_size, num_classes, input_size, test_rate=0.25):  # need modify
+def data_flow2(train_data_dir_list, batch_size, num_classes, input_size, test_rate=0.25):  # need modify
 
     train_img_paths = []
     train_labels = []
@@ -188,7 +190,7 @@ def data_flow(train_data_dir_list, batch_size, num_classes, input_size, test_rat
     return train_sequence, validation_sequence
 
 
-def data_flow2(train_data_dir_list, batch_size, num_classes, input_size):  # need modify
+def data_flow(train_data_dir_list, batch_size, num_classes, input_size):  # need modify
 
     label_files = []
     for train_data_dir in train_data_dir_list:
@@ -263,14 +265,33 @@ def origin_test():
 
 def data_augmentation():
     train_img_paths = [
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_17.jpg',
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_19.jpg']
+
+    train_labels = [[0], [1]]
+    train_sequence = BaseSequence(train_img_paths, train_labels, 2, [331, 331])
+
+    print(len(train_sequence))
+    for i in train_sequence:
+        print(type(i))
+        print(i)
+    # for i in range(1):
+    #     batchx, batchy = train_sequence.__getitem__(0)
+    #     cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/augment/%s.jpg' % i, batchx[0])
+    # print('Done')
+
+
+def auto_augment():
+    import matplotlib.pyplot as plt
+    args = {'auto_augment': True, 'cutout': True}
+    datagen = GarbageImageDataGenerator(args)
+
+    train_img_paths = [
         '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_17.jpg']
     train_labels = [[0]]
-    train_sequence = BaseSequence(train_img_paths, train_labels, 1, [224, 224])
+    train_sequence = BaseSequence(train_img_paths, train_labels, 1, [331, 331])
 
-    for i in range(10):
-        batchx, batchy = train_sequence.__getitem__(0)
-        cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/augment/%s.jpg' % i, batchx[0])
-    print('Done')
+    x_train, y_train = train_sequence.__getitem__(0)
 
 
 if __name__ == '__main__':
