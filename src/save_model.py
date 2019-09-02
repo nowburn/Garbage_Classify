@@ -6,7 +6,7 @@ from keras import backend
 from keras.optimizers import adam
 # from moxing.framework import file
 
-from train import model_fn
+#from train import model_fn
 import shutil
 
 
@@ -76,10 +76,10 @@ def save_pb_model(FLAGS, model):
         print('copy config.json and customize_service.py failed')
 
 
-def load_weights_save_pb(FLAGS):
-    optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
-    objective = 'binary_crossentropy'
-    metrics = ['accuracy']
-    model = model_fn(FLAGS, objective, optimizer, metrics)
-    load_weights(model, FLAGS.freeze_weights_file_path)
-    save_pb_model(FLAGS, model)
+# def load_weights_save_pb(FLAGS):
+#     optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
+#     objective = 'binary_crossentropy'
+#     metrics = ['accuracy']
+#     model = model_fn(FLAGS, objective, optimizer, metrics)
+#     load_weights(model, FLAGS.freeze_weights_file_path)
+#     save_pb_model(FLAGS, model)

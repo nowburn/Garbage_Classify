@@ -11,6 +11,7 @@ from keras import backend
 from keras.optimizers import adam
 # from moxing.framework import file
 from tensorflow.python.saved_model import tag_constants
+from train import nasnet_model_fn
 
 from train import model_fn
 from save_model import load_weights
@@ -72,11 +73,12 @@ def test_single_h5(FLAGS, h5_weights_path):
         print('%s is not a h5 weights file path' % h5_weights_path)
         return
     optimizer = adam(lr=FLAGS.learning_rate, clipnorm=0.001)
-    objective = 'binary_crossentropy'
+    objective = 'categorical_crossentropy'
     metrics = ['accuracy']
-    model = model_fn(FLAGS, objective, optimizer, metrics)
+    model = nasnet_model_fn(FLAGS, objective, optimizer, metrics)
     load_weights(model, FLAGS.eval_weights_path)
     img_names, test_data, test_labels = load_test_data(FLAGS)
+
     predictions = model.predict(test_data, verbose=0)
 
     right_count = 0

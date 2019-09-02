@@ -1,3 +1,4 @@
+import collections
 import os
 import random
 
@@ -7,18 +8,19 @@ from tensorflow.python.saved_model import tag_constants
 from PIL import Image
 from glob import glob
 import shutil
-from keras.utils import np_utils
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from classification_models.keras import Classifiers
 import matplotlib.pyplot as plt
-import cv2
 
-BASE_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/my_data/processed/'
+BASE_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/processed/'
 
-IMG_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/example/'
+IMG_DIR = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/test_data/'
 
-MODEL_PATH = '/home/nowburn/disk/data/Garbage_Classify/pretrained_model/kaggle_model/model/'
+MODEL_PATH = '/home/nowburn/disk/data/Garbage_Classify/model_imagedatagenerate/nas-origin_data-auto_augment-30/model/'
+
+
+# MODEL_PATH = '/home/nowburn/disk/data/Garbage_Classify/model_snapshots/nas-origin-augment-25/model/'
 
 
 class Garbage_classify_service():
@@ -125,7 +127,7 @@ class Garbage_classify_service():
             preprocessed_data[file_name] = img
         return preprocessed_data
 
-    def inference(self, data, file_list, base_dir):
+    def inference2(self, data, file_list, base_dir):
         """
         model inference function
         Here are a inference example of resnet, if you use another model, please modify this function
@@ -142,6 +144,24 @@ class Garbage_classify_service():
                 if not os.path.exists(dst_dir):
                     os.mkdir(dst_dir)
                 shutil.move(file_list[idx], os.path.join(dst_dir, name + '.jpg'))
+            else:
+                result = {'result': 'predict score is None'}
+            idx += 1
+            print(result)
+
+    def inference(self, data):
+        """
+        model inference function
+        Here are a inference example of resnet, if you use another model, please modify this function
+        """
+        idx = 0
+        for name, img in data.items():
+
+            img = img[np.newaxis, :, :, :]  # the input tensor shape of resnet is [?, 224, 224, 3]
+            pred_score = self.sess.run([self.output_score], feed_dict={self.input_images: img})
+            if pred_score is not None:
+                pred_label = np.argmax(pred_score[0], axis=1)[0]
+                result = {str(pred_label) + ': ' + name: self.label_id_name_dict[str(pred_label)]}
             else:
                 result = {'result': 'predict score is None'}
             idx += 1
@@ -291,20 +311,20 @@ class Preprocess():
 
 
 if __name__ == '__main__':
-    train_dir_list = ['/home/nowburn/disk/data/Garbage_Classify/source/data/train_data/']
-    output_base_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/'
-    pipeline = Newdata_pipeline()
-    pipeline.split_dir(train_dir_list, output_base_dir)
-    # process.nasnetlarge_process(os.path.join(IMG_DIR, '21_108.jpg'))
-    # process.nasnetlarge_process('test1.png')
+    pass
+    # train_dir_list = ['/home/nowburn/disk/data/Garbage_Classify/source/data/train_data/']
+    # output_base_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/'
+    # pipeline = Newdata_pipeline()
+    # pipeline.split_dir(train_dir_list, output_base_dir)
+
     # server = Garbage_classify_service('TEST', MODEL_PATH)
     # data = {}
     # img_dict = collections.OrderedDict()
     # img_list = glob(os.path.join(IMG_DIR, '*.jpg'))
-    # img_list.sort(key=lambda x: int((os.path.basename(x)[9:]).split('.')[0]))
+    # # img_list.sort(key=lambda x: int((os.path.basename(x)[9:]).split('.')[0]))
     # for img_path in img_list:
     #     file_name = os.path.basename(img_path)
-    #     img_dict[file_name[:-4]] = img_path
+    #     img_dict[file_name.split('img_')[1]] = img_path
     #
     # data = server.preprocess(img_dict)
-    # server.inference(data, img_list, BASE_DIR+'processed')
+    # server.inference(data)
