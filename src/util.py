@@ -8,7 +8,7 @@ from tensorflow.python.saved_model import tag_constants
 from PIL import Image
 from glob import glob
 import shutil
-from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedShuffleSplit, train_test_split
 
 from classification_models.keras import Classifiers
 import matplotlib.pyplot as plt
@@ -237,13 +237,13 @@ class Newdata_pipeline():
                 if not os.path.exists(img_file):
                     os.remove(file)
 
-    def split_dir(self, train_data_dir_list, output_basedir):
+    def split_dir(self, data_dir_list, output_basedir):
         label_files = []
         train_img_paths = []
         train_labels = []
         val_img_paths = []
         val_labels = []
-        for train_data_dir in train_data_dir_list:
+        for train_data_dir in data_dir_list:
             label_files += glob(os.path.join(train_data_dir, '*.txt'))
 
         random.shuffle(label_files)
@@ -261,17 +261,11 @@ class Newdata_pipeline():
             label = int(line_split[1])
             img_paths.append(os.path.join(cur_dir, img_name))
             labels.append(label)
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.25, random_state=0)
-        for train_index, test_index in sss.split(img_paths, labels):
-            for index in train_index:
-                train_img_paths.append(img_paths[index])
-                train_labels.append(labels[index])
-            for index in test_index:
-                val_img_paths.append(img_paths[index])
-                val_labels.append(labels[index])
+        train_img_paths, val_img_paths, train_labels, val_labels = \
+            train_test_split(img_paths, labels, test_size=0.25, random_state=0, stratify=labels)
 
-        train_data_dir = os.path.join(output_basedir, 'train_data')
-        val_data_dir = os.path.join(output_basedir, 'val_data')
+        train_data_dir = os.path.join(output_basedir, 'train')
+        val_data_dir = os.path.join(output_basedir, 'valid')
         if not os.path.exists(train_data_dir):
             os.mkdir(train_data_dir)
         if not os.path.exists(val_data_dir):
@@ -280,13 +274,56 @@ class Newdata_pipeline():
             class_dir = os.path.join(train_data_dir, str(label))
             if not os.path.exists(class_dir):
                 os.mkdir(class_dir)
-            shutil.copyfile(path, os.path.join(class_dir, os.path.basename(path)))
+            shutil.move(path, os.path.join(class_dir, os.path.basename(path)))
+            os.remove(path.replace('.jpg', '.txt'))
 
         for label, path in zip(val_labels, val_img_paths):
             class_dir = os.path.join(val_data_dir, str(label))
             if not os.path.exists(class_dir):
                 os.mkdir(class_dir)
-            shutil.copyfile(path, os.path.join(class_dir, os.path.basename(path)))
+            shutil.move(path, os.path.join(class_dir, os.path.basename(path)))
+            os.remove(path.replace('.jpg', '.txt'))
+        print('=' * 70)
+        print('train_data : %s' % len(train_labels))
+        print('val_data : %s' % len(val_labels))
+
+    def split_data(self, data_dir_list, output_basedir):
+        label_files = []
+        for train_data_dir in data_dir_list:
+            label_files += glob(os.path.join(train_data_dir, '*.txt'))
+
+        img_paths = []
+        labels = []
+        for index, file_path in enumerate(label_files):
+            cur_dir = file_path.split('img_')[0]
+            with open(file_path, 'r') as f:
+                line = f.readline()
+            line_split = line.strip().split(', ')
+            if len(line_split) != 2:
+                print('%s contain error lable' % os.path.basename(file_path))
+                continue
+            img_name = line_split[0]
+            label = int(line_split[1])
+            img_paths.append(os.path.join(cur_dir, img_name))
+            labels.append(label)
+        train_img_paths, val_img_paths, train_labels, val_labels = \
+            train_test_split(img_paths, labels, test_size=0.2, random_state=0, stratify=labels)
+
+        train_data_dir = os.path.join(output_basedir, 'train')
+        val_data_dir = os.path.join(output_basedir, 'test')
+        if not os.path.exists(train_data_dir):
+            os.mkdir(train_data_dir)
+        if not os.path.exists(val_data_dir):
+            os.mkdir(val_data_dir)
+        for label, path in zip(train_labels, train_img_paths):
+            txt_path = path.replace('.jpg', '.txt')
+            shutil.copyfile(path, os.path.join(train_data_dir, os.path.basename(path)))
+            shutil.copyfile(txt_path, os.path.join(train_data_dir, os.path.basename(txt_path)))
+
+        for label, path in zip(val_labels, val_img_paths):
+            txt_path = path.replace('.jpg', '.txt')
+            shutil.copyfile(path, os.path.join(val_data_dir, os.path.basename(path)))
+            shutil.copyfile(txt_path, os.path.join(val_data_dir, os.path.basename(txt_path)))
         print('=' * 70)
         print('train_data : %s' % len(train_labels))
         print('val_data : %s' % len(val_labels))
@@ -298,8 +335,9 @@ class Preprocess():
         nasnetlarge, preprocess_input = Classifiers.get('nasnetlarge')
         img = Image.open(path)
         img = np.array(img)
-        # img = img[:, :, ::-1]
         img = np.expand_dims(img, axis=0)
+        print(type(img))
+        print(img.shape)
         img2 = preprocess_input(img)
         print(type(img2))
         print(img2.shape)
@@ -310,8 +348,84 @@ class Preprocess():
         # cv2.waitKey(0)
 
 
+def check_error_imgs(txtdir, testdir):
+    label_id_name_dict = \
+        {
+            "0": "其他垃圾/一次性快餐盒",
+            "1": "其他垃圾/污损塑料",
+            "2": "其他垃圾/烟蒂",
+            "3": "其他垃圾/牙签",
+            "4": "其他垃圾/破碎花盆及碟碗",
+            "5": "其他垃圾/竹筷",
+            "6": "厨余垃圾/剩饭剩菜",
+            "7": "厨余垃圾/大骨头",
+            "8": "厨余垃圾/水果果皮",
+            "9": "厨余垃圾/水果果肉",
+            "10": "厨余垃圾/茶叶渣",
+            "11": "厨余垃圾/菜叶菜根",
+            "12": "厨余垃圾/蛋壳",
+            "13": "厨余垃圾/鱼骨",
+            "14": "可回收物/充电宝",
+            "15": "可回收物/包",
+            "16": "可回收物/化妆品瓶",
+            "17": "可回收物/塑料玩具",
+            "18": "可回收物/塑料碗盆",
+            "19": "可回收物/塑料衣架",
+            "20": "可回收物/快递纸袋",
+            "21": "可回收物/插头电线",
+            "22": "可回收物/旧衣服",
+            "23": "可回收物/易拉罐",
+            "24": "可回收物/枕头",
+            "25": "可回收物/毛绒玩具",
+            "26": "可回收物/洗发水瓶",
+            "27": "可回收物/玻璃杯",
+            "28": "可回收物/皮鞋",
+            "29": "可回收物/砧板",
+            "30": "可回收物/纸板箱",
+            "31": "可回收物/调料瓶",
+            "32": "可回收物/酒瓶",
+            "33": "可回收物/金属食品罐",
+            "34": "可回收物/锅",
+            "35": "可回收物/食用油桶",
+            "36": "可回收物/饮料瓶",
+            "37": "有害垃圾/干电池",
+            "38": "有害垃圾/软膏",
+            "39": "有害垃圾/过期药物"
+        }
+    correct_dict = {}
+    with open(os.path.join(txtdir, 'accuracy.txt'), 'r') as f:
+        img_list = f.readlines()
+        for line in img_list:
+            if line.startswith('img_'):
+                name, true_label, predit_label = line.strip().split(',')
+                wrong_dir = os.path.join(txtdir, 'wrong/' + str(predit_label.strip()))
+                correct_dict[os.path.join(wrong_dir, name)] = true_label.strip() + ',' + predit_label.strip()
+
+    correct_dict = sorted(correct_dict.items(), key=lambda x: int((x[0].split('img_'))[1][:-4]))
+    for item in correct_dict:
+        dst_file, true_label, predit_label = item[0], item[1].split(',')[0], item[1].split(',')[1]
+        wrong_dir = dst_file.split('img_')[0]
+        name = os.path.basename(dst_file)
+        if not os.path.exists(wrong_dir):
+            os.makedirs(wrong_dir)
+        shutil.copyfile(os.path.join(testdir, name), os.path.join(wrong_dir, name))
+        with open(wrong_dir + '/correct.txt', 'a') as f:
+            f.write('{}: {}({}) {}({})\n'.format(name, label_id_name_dict[true_label.strip()], true_label,
+                                                 label_id_name_dict[predit_label.strip()], predit_label))
+
+
 if __name__ == '__main__':
-    pass
+    # pipline = Newdata_pipeline()
+    # data_dir_list = ['/home/nowburn/disk/data/Garbage_Classify/source/garbage_classify_v2/train_data_v2',
+    #                  ]
+    #
+    # test_dir = ['/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data/test_data']
+    # output_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data'
+    # pipline.split_data(data_dir_list, output_dir)
+
+    txt_dir = '/home/nowburn/disk/data/Garbage_Classify/models/nas-label_smoothing-tta-11'
+    test_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data/test'
+    check_error_imgs(txt_dir, test_dir)
     # train_dir_list = ['/home/nowburn/disk/data/Garbage_Classify/source/data/train_data/']
     # output_base_dir = '/home/nowburn/python_projects/python/Garbage_Classify/datasets/'
     # pipeline = Newdata_pipeline()

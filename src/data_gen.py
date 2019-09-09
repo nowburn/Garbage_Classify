@@ -9,12 +9,11 @@ import cv2
 import numpy as np
 from glob import glob
 from PIL import Image
+import matplotlib.pyplot as plt
 
-from keras.utils import np_utils, Sequence, OrderedEnqueuer
+from keras.utils import np_utils, Sequence
 from sklearn.model_selection import train_test_split
 from imgaug import augmenters as iaa
-
-from datasets.dataset import GarbageImageDataGenerator
 
 
 class BaseSequence(Sequence):
@@ -25,12 +24,13 @@ class BaseSequence(Sequence):
     而且能保证在多进程下的一个epoch中不会重复取相同的样本
     """
 
-    def __init__(self, img_paths, labels, batch_size, img_size):
+    def __init__(self, img_paths, labels, batch_size, img_size, is_train=True):
         assert len(img_paths) == len(labels), "len(img_paths) must equal to len(lables)"
         assert img_size[0] == img_size[1], "img_size[0] must equal to img_size[1]"
         self.x_y = np.hstack((np.array(img_paths).reshape(len(img_paths), 1), np.array(labels)))
         self.batch_size = batch_size
         self.img_size = img_size
+        self.is_train = is_train
 
     def __len__(self):
         return math.ceil(len(self.x_y) / self.batch_size)
@@ -60,11 +60,19 @@ class BaseSequence(Sequence):
         img = img.resize((int(img.size[0] * resize_scale), int(img.size[1] * resize_scale)))
         img = img.convert('RGB')
         img = np.array(img)
-        img = img[:, :, ::-1]
         img = self.center_img(img, self.img_size[0])
         return img
 
-    # 对图像做随机数据增强
+    def mixup_augment(self, batch_x, batch_y, alpha=0.1):
+        tmpx = np.copy(batch_x[0])
+        tmpy = np.copy(batch_y[0])
+        for i in range(3):
+            batch_x[i] = alpha * batch_x[i] + (1 - alpha) * batch_x[i + 1]
+            batch_y[i] = alpha * batch_y[i] + (1 - alpha) * batch_y[i + 1]
+        batch_x[3] = alpha * batch_x[3] + (1 - alpha) * tmpx
+        batch_y[3] = alpha * batch_y[3] + (1 - alpha) * tmpy
+        return batch_x, batch_y
+
     def get_random_data(self, img_path):
 
         def add_noise(image, percentage):
@@ -101,7 +109,6 @@ class BaseSequence(Sequence):
         resize_scale = self.img_size[0] / max(image.size[:2])
         image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))
         image = np.array(image)
-        image = image[:, :, ::-1]
         aug_num = np.random.randint(low=0, high=NUM_ANGMENTATION_SUPPORT)
         aug_queue = np.random.permutation(NUM_ANGMENTATION_SUPPORT)[0:aug_num]
         try:
@@ -123,16 +130,16 @@ class BaseSequence(Sequence):
         resize_scale = self.img_size[0] / max(image.size[:2])
         image = image.resize((int(image.size[0] * resize_scale), int(image.size[1] * resize_scale)))
         image = np.array(image)
-        image = image[:, :, ::-1]
 
-        augs = iaa.SomeOf((2, 4),
+        augs = iaa.SomeOf((1, 3),
                           [
-                              iaa.Crop(px=(0, 4)),
-                              iaa.Affine(scale={'x': (0.8, 1.2), 'y': (0.8, 1.2)}),
-                              iaa.Affine(translate_percent={'x': (-0.2, 0.2), 'y': (-0.2, 0.2)}),
-                              iaa.Affine(rotate=(-45, 45)),
-                              iaa.Affine(shear=(-10, 10))
-
+                              iaa.CropAndPad(percent=(-0.3, 0.3), pad_mode=["constant"], pad_cval=(255)),
+                              iaa.Affine(rotate=(-25, 25)),
+                              iaa.Fliplr(0.5),
+                              # iaa.GaussianBlur(sigma=1.0),
+                              iaa.Noop()
+                              # iaa.Affine(scale={'x': (0.5, 1.2), 'y': (0.5, 1.2)}),
+                              # # iaa.Affine(translate_percent={'x': (-0.2, 0.2), 'y': (-0.2, 0.2)}),
                           ])
         seq = iaa.Sequential([augs])
         image = seq.augment_image(image)
@@ -142,52 +149,22 @@ class BaseSequence(Sequence):
     def __getitem__(self, idx):
         batch_x = self.x_y[idx * self.batch_size: (idx + 1) * self.batch_size, 0]
         batch_y = self.x_y[idx * self.batch_size: (idx + 1) * self.batch_size, 1:]
-        batch_x = np.array([self.get_random_data(img_path) for img_path in batch_x])
-        batch_y = np.array(batch_y).astype(np.float32)
+        # batch_y = np.array(batch_y).astype(np.float32)
+
+        batch_y = np.array(batch_y).astype(np.float32) * (1 - 0.05) + 0.05 / 40
+        if self.is_train:
+            batch_x = np.array([self.get_augment_data(img_path) for img_path in batch_x])
+            if len(batch_y) == self.batch_size:
+                return self.mixup_augment(batch_x, batch_y)
+        else:
+            batch_x = np.array([self.preprocess_img(img_path) for img_path in batch_x])
+
         return batch_x, batch_y
 
     def on_epoch_end(self):
         """Method called at the end of every epoch.
         """
         np.random.shuffle(self.x_y)
-
-
-def data_flow2(train_data_dir_list, batch_size, num_classes, input_size, test_rate=0.25):  # need modify
-
-    train_img_paths = []
-    train_labels = []
-    val_img_paths = []
-    val_labels = []
-    for train_data_dir in train_data_dir_list:
-        label_files = glob(os.path.join(train_data_dir, '*.txt'))
-        random.shuffle(label_files)
-        for index, file_path in enumerate(label_files):
-            with codecs.open(file_path, 'r', 'utf-8') as f:
-                line = f.readline()
-            line_split = line.strip().split(', ')
-            if len(line_split) != 2:
-                print('%s contain error lable' % os.path.basename(file_path))
-                continue
-            img_name = line_split[0]
-            label = int(line_split[1])
-            if np.random.random() < test_rate:
-                val_img_paths.append(os.path.join(train_data_dir, img_name))
-                val_labels.append(label)
-            else:
-                train_img_paths.append(os.path.join(train_data_dir, img_name))
-                train_labels.append(label)
-        label_files.clear()
-
-    train_labels = np_utils.to_categorical(train_labels, num_classes)
-    val_labels = np_utils.to_categorical(val_labels, num_classes)
-    print('====================================================================')
-    print('total samples: %d, training samples: %d, validation samples: %d' % (
-        len(train_labels) + len(val_labels), len(train_labels), len(val_labels)))
-
-    train_sequence = BaseSequence(train_img_paths, train_labels, batch_size, [input_size, input_size])
-    validation_sequence = BaseSequence(val_img_paths, val_labels, batch_size, [input_size, input_size])
-
-    return train_sequence, validation_sequence
 
 
 def data_flow(train_data_dir_list, batch_size, num_classes, input_size):  # need modify
@@ -213,12 +190,12 @@ def data_flow(train_data_dir_list, batch_size, num_classes, input_size):  # need
         labels.append(label)
     labels = np_utils.to_categorical(labels, num_classes)
     train_img_paths, validation_img_paths, train_labels, validation_labels = \
-        train_test_split(img_paths, labels, test_size=0.25, random_state=0, stratify=labels)
+        train_test_split(img_paths, labels, test_size=0.2, random_state=0, stratify=labels)
     print('total samples: %d, training samples: %d, validation samples: %d' % (
         len(img_paths), len(train_img_paths), len(validation_img_paths)))
-
-    train_sequence = BaseSequence(train_img_paths, train_labels, batch_size, [input_size, input_size])
-    validation_sequence = BaseSequence(validation_img_paths, validation_labels, batch_size, [input_size, input_size])
+    train_sequence = BaseSequence(train_img_paths, train_labels, batch_size, [input_size, input_size], is_train=True)
+    validation_sequence = BaseSequence(validation_img_paths, validation_labels, batch_size, [input_size, input_size],
+                                       is_train=False)
 
     # 构造多进程的数据流生成器
     # train_enqueuer = OrderedEnqueuer(train_sequence, use_multiprocessing=True, shuffle=True)
@@ -262,35 +239,65 @@ def origin_test():
     print('end')
 
 
-def data_augmentation():
+def plotImage(X):
+    plt.figure(figsize=(10, 10))
+    plt.imshow(X.reshape(331, 331, 3))
+    plt.show()
+    plt.close()
+
+
+def data_augmentation2():
     train_img_paths = [
-        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_17.jpg',
-        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_19.jpg']
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/train_data/img_17.jpg',
+        '/home/nowburn/disk/data/Garbage_Classify/new/nas-new_all-aug-9/wrong/1/img_17976.jpg']
 
     train_labels = [[0], [1]]
     train_sequence = BaseSequence(train_img_paths, train_labels, 2, [331, 331])
 
-    print(len(train_sequence))
-    for i in train_sequence:
-        print(type(i))
-        print(i)
-    # for i in range(1):
-    #     batchx, batchy = train_sequence.__getitem__(0)
-    #     cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/augment/%s.jpg' % i, batchx[0])
-    # print('Done')
+    for i in range(10):
+        batchx, batchy = train_sequence.__getitem__(0)
+        # cv2.imwrite('/home/nowburn/disk/data/Garbage_Classify/augment/%s.jpg' % i, batchx[0])
+        img = Image.fromarray(batchx[0])
+        img.save('/home/nowburn/disk/data/Garbage_Classify/augment/%s.jpg' % i)
+
+    print('Done')
 
 
-def auto_augment():
-    import matplotlib.pyplot as plt
-    args = {'auto_augment': True, 'cutout': True}
-    datagen = GarbageImageDataGenerator(args)
-
+def data_augmentation():
     train_img_paths = [
-        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/garbage_classify/train_data/img_17.jpg']
-    train_labels = [[0]]
-    train_sequence = BaseSequence(train_img_paths, train_labels, 1, [331, 331])
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data/train/img_1.jpg',
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data/train/img_17.jpg',
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data/train/img_2913.jpg',
+        '/home/nowburn/python_projects/python/Garbage_Classify/datasets/origin_data/train/img_17397.jpg']
+    train_labels = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    train_sequence = BaseSequence(train_img_paths, train_labels, 4, [331, 331])
 
-    x_train, y_train = train_sequence.__getitem__(0)
+    # while True:
+    #     plt.figure(figsize=(10, 10))
+    #     plt.subplot(4, 3, 1)
+    #     plt.axis('off')
+    #     plt.imshow(Image.open(train_img_paths[0]))
+    #     for i in range(4):
+    #         batch_x, batch_y = train_sequence.__getitem__(0)
+    #         plt.subplot(4, 3, i + 4)
+    #         plt.imshow(batch_x[0])
+    #         plt.axis('off')
+    #     plt.show()
+
+    plt.figure(figsize=(12, 12))
+    for i, path in enumerate(train_img_paths):
+        plt.subplot(2, 4, i + 1)
+        plt.imshow(Image.open(path))
+        plt.title(train_labels[i])
+        plt.axis('off')
+
+    batch_x, batch_y = train_sequence.__getitem__(0)
+    for i in range(len(batch_x)):
+        plt.subplot(2, 4, i + 5)
+        plt.imshow(batch_x[i])
+        plt.title(batch_y[i], fontsize='xx-small')
+        plt.axis('off')
+    plt.show()
 
 
 if __name__ == '__main__':

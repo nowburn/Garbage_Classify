@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 python run.py \
-      --data_url='../datasets/garbage_classify/train_data,../datasets/garbage_classify/my_data' \
+      --data_url='../datasets/origin_data/train' \
+      --test_data_url='../datasets/origin_data/test' \
       --train_url='../model_snapshots' \
-      --num_classes=40 \
       --deploy_script_path='./deploy_scripts' \
-      --max_epochs=20
-      #--test_data_url='../datasets/test_data'
+      --num_classes=40 \
+      --max_epochs=40 \

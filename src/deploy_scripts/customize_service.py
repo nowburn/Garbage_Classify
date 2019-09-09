@@ -90,18 +90,47 @@ class garbage_classify_service(TfServingBaseService):
         background[center_y:center_y + h, center_x:center_x + w] = img
         return background
 
+    # def preprocess_img2(self, img):
+    #     """
+    #     image preprocessing
+    #     you can add your special preprocess method here
+    #     """
+    #     resize_scale = self.input_size / max(img.size[:2])
+    #     img = img.resize((int(img.size[0] * resize_scale), int(img.size[1] * resize_scale)))
+    #     img = img.convert('RGB')
+    #     img = np.array(img)
+    #     img = self.center_img(img, self.input_size)
+    #     return img
+
     def preprocess_img(self, img):
         """
         image preprocessing
         you can add your special preprocess method here
         """
-        resize_scale = self.input_size / max(img.size[:2])
-        img = img.resize((int(img.size[0] * resize_scale), int(img.size[1] * resize_scale)))
-        img = img.convert('RGB')
-        img = np.array(img)
-        img = img[:, :, ::-1]
-        img = self.center_img(img, self.input_size)
-        return img
+        img_list = []
+        cropped_list = self.multi_crop(img)
+        for cropped_img in cropped_list:
+            resize_scale = self.input_size / max(cropped_img.size[:2])
+            cropped_img = cropped_img.resize(
+                (int(cropped_img.size[0] * resize_scale), int(cropped_img.size[1] * resize_scale)))
+            cropped_img = cropped_img.convert('RGB')
+            cropped_img = np.array(cropped_img)
+            cropped_img = self.center_img(cropped_img, self.input_size)
+            img_list.append(cropped_img)
+        return img_list
+
+    def multi_crop(self, img):
+        cropped_list = []
+        w, h = img.size
+        crop_areas = [(0, 0, w // 2, h // 2),
+                      (w // 2, 0, w, h // 2),
+                      (0, h // 2, w // 2, h),
+                      (w // 2, h // 2, w, h),
+                      (w // 4, h // 4, w * 3 // 4, h * 3 // 4)]
+        for i, crop_area in enumerate(crop_areas):
+            cropped_image = img.crop(crop_area)
+            cropped_list.append(cropped_image)
+        return cropped_list
 
     def _preprocess(self, data):
         preprocessed_data = {}
@@ -117,11 +146,16 @@ class garbage_classify_service(TfServingBaseService):
         model inference function
         Here are a inference example of resnet, if you use another model, please modify this function
         """
-        img = data[self.input_key_1]
-        img = img[np.newaxis, :, :, :]  # the input tensor shape of resnet is [?, 224, 224, 3]
-        pred_score = self.sess.run([self.output_score], feed_dict={self.input_images: img})
-        if pred_score is not None:
-            pred_label = np.argmax(pred_score[0], axis=1)[0]
+        imgs = data[self.input_key_1]
+        avg = 0
+        for i in range(len(imgs)):
+            img = imgs[i]
+            img = img[np.newaxis, :, :, :]  # the input tensor shape of resnet is [?, 224, 224, 3]
+            pred_score = self.sess.run([self.output_score], feed_dict={self.input_images: img})
+            avg += pred_score[0]
+        avg /= len(imgs)
+        if avg is not None:
+            pred_label = np.argmax(avg, axis=1)[0]
             result = {'result': self.label_id_name_dict[str(pred_label)]}
         else:
             result = {'result': 'predict score is None'}

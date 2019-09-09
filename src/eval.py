@@ -11,9 +11,7 @@ from keras import backend
 from keras.optimizers import adam
 # from moxing.framework import file
 from tensorflow.python.saved_model import tag_constants
-from train import nasnet_model_fn
-
-from train import model_fn
+from nets import nasnet_model_fn, model_fn
 from save_model import load_weights
 
 backend.set_image_data_format('channels_last')
@@ -44,7 +42,6 @@ def preprocess_img(img_path, img_size):
     img = img.resize((int(img.size[0] * resize_scale), int(img.size[1] * resize_scale)))
     img = img.convert('RGB')
     img = np.array(img)
-    img = img[:, :, ::-1]
     img = center_img(img, img_size)
     return img
 
